@@ -19,7 +19,6 @@ public class GlobalExceptionHandler {
 
     /**
      * SQL 完整性约束违反异常
-     * @return
      */
     @ExceptionHandler(SQLIntegrityConstraintViolationException.class)
     public R<String> exceptionHandler(SQLIntegrityConstraintViolationException ex) {
@@ -29,6 +28,15 @@ public class GlobalExceptionHandler {
             return R.error("账号" + split[2] + "已存在");
         }
         return R.error("未知错误");
+    }
+
+    /**
+     * 自定义异常
+     */
+    @ExceptionHandler(CustomException.class)
+    public R<String> exceptionHandler(CustomException ce) {
+        String message = ce.getMessage();
+        return R.error(message);
     }
 
 }
