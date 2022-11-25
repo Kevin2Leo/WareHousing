@@ -17,6 +17,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -35,6 +38,29 @@ public class SetmealController {
 
     @Autowired
     private CategoryService categoryService;
+
+    /**
+     * 修改套餐信息
+     * @param setmealDto
+     */
+    @PutMapping
+    @CacheEvict(value = "setmealCache", allEntries = true) //清理所有名叫setmealCache的缓存
+    public R<String> update(@RequestBody SetmealDto setmealDto) {
+
+        setmealService.updateWithSetmealDish(setmealDto);
+        return R.success("菜品修改成功");
+    }
+
+    /**
+     * 根据id查询套餐详情信息
+     * @param id
+     */
+    @GetMapping("/{id}")
+    public R<SetmealDto> dish(@PathVariable("id") Long id) {
+
+        SetmealDto setmealDto = setmealService.getByIdWithDishs(id);
+        return R.success(setmealDto);
+    }
 
     /**
      * 分页查询套餐
@@ -81,6 +107,7 @@ public class SetmealController {
      * @return
      */
     @PostMapping
+    @CacheEvict(value = "setmealCache", allEntries = true) //清理所有名叫setmealCache的缓存
     public R<String> add(@RequestBody SetmealDto setmealDto) {
 
         setmealService.saveSetmealWithDish(setmealDto);
@@ -94,6 +121,7 @@ public class SetmealController {
      * @return
      */
     @DeleteMapping
+    @CacheEvict(value = "setmealCache", allEntries = true) //清理所有名叫setmealCache的缓存
     public R<String> delete(@RequestParam List<Long> ids) {
 
         setmealService.removeSetmealWithDish(ids);
@@ -126,6 +154,7 @@ public class SetmealController {
      * @return
      */
     @GetMapping("/list")
+    @Cacheable(value = "setmealCache", key = "#setmeal.categoryId+'_'+#setmeal.status")
     public R<List<SetmealDto>> list(Setmeal setmeal) {
 
         //构造查询条件
