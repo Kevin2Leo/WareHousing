@@ -16,10 +16,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -35,6 +38,9 @@ public class DishController {
 
     @Autowired
     private CategoryService categoryService;
+
+    @Autowired
+    private RedisTemplate redisTemplate;
 
     /**
      * 新增菜品
@@ -107,7 +113,12 @@ public class DishController {
     public R<String> update(@RequestBody DishDto dishDto) {
 
         dishService.updateWithFlavors(dishDto);
-
+        //优化方案1 清除所有菜品dish缓存数据
+//        Set keys = redisTemplate.keys("dish_*");
+//        redisTemplate.delete(keys);
+        //优化方案2 只清除对应分类categoryId下面的菜品dish缓存数据
+        String key = "dish_" + dishDto.getCategoryId() + "_1";
+        redisTemplate.delete(key);
         return R.success("菜品修改成功");
     }
 
@@ -119,6 +130,16 @@ public class DishController {
     @GetMapping("/list")
     public R<List<DishDto>> list(Dish dish) {
 
+        //优化：利用Redis缓存
+        List<DishDto> dishDtoList = null;
+        String key = "dish_" + dish.getCategoryId() + "_" + dish.getStatus();//动态构造key
+        //1.先从Redis中获取缓存数据
+        dishDtoList = (List<DishDto>) redisTemplate.opsForValue().get(key);
+        //2.如果存在，直接返回响应，无需查询数据库
+        if (dishDtoList != null) {
+            return R.success(dishDtoList);
+        }
+        //3.如果不存在，需要查询数据库，将查询到的菜品数据缓存到Redis
         //构造查询条件
         LambdaQueryWrapper<Dish> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(dish.getCategoryId() != null, Dish::getCategoryId, dish.getCategoryId())
@@ -128,7 +149,7 @@ public class DishController {
                 .orderByDesc(Dish::getUpdateTime);
 
         List<Dish> dishList = dishService.list(wrapper);
-        List<DishDto> dishDtoList = new ArrayList<>();
+        dishDtoList = new ArrayList<>();
         for (Dish dish1 : dishList) {
             DishDto dishDto = new DishDto();
             BeanUtils.copyProperties(dish1, dishDto);//拷贝一份
@@ -141,7 +162,8 @@ public class DishController {
 
             dishDtoList.add(dishDto);
         }
-
+        //将查询到的菜品数据缓存到Redis (并设置超时时间 60 分钟)
+        redisTemplate.opsForValue().set(key, dishDtoList, 60L, TimeUnit.MINUTES);
         return R.success(dishDtoList);
     }
 
